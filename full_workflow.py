@@ -66,48 +66,26 @@ def create_driver(headless=True):
     options.set_preference("browser.download.manager.showWhenStarting", False)
     options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv")
     
-    # Performance and stability
-    options.set_preference("network.http.connection-timeout", 120)
-    options.set_preference("dom.max_script_run_time", 120)
-    options.set_preference("marionette.port", 2828)
-    
-    # Find Firefox binary
-    firefox_binary = None
-    possible_paths = [
-        "/usr/bin/firefox-esr",
-        "/usr/bin/firefox",
-        "/snap/bin/firefox"
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            firefox_binary = path
-            print(f"Found Firefox at: {firefox_binary}")
-            break
-    
-    if firefox_binary:
-        options.binary_location = firefox_binary
+    # Disable unnecessary features for headless mode
+    options.set_preference("browser.cache.disk.enable", False)
+    options.set_preference("browser.cache.memory.enable", False)
+    options.set_preference("browser.cache.offline.enable", False)
+    options.set_preference("network.http.use-cache", False)
     
     try:
         print("Installing GeckoDriver...")
-        service = Service(
-            GeckoDriverManager().install(),
-            log_path=os.path.join(os.getcwd(), 'geckodriver.log')
-        )
+        service = Service(GeckoDriverManager().install())
         
-        print("Starting Firefox...")
+        print("Starting Firefox in headless mode...")
         driver = webdriver.Firefox(service=service, options=options)
         driver.set_page_load_timeout(90)
         driver.set_script_timeout(90)
-        print("Firefox started successfully!")
+        print("✓ Firefox started successfully!")
         return driver
     except Exception as e:
-        print(f"Error creating Firefox driver: {e}")
-        # Try to read geckodriver log
-        log_path = os.path.join(os.getcwd(), 'geckodriver.log')
-        if os.path.exists(log_path):
-            with open(log_path, 'r') as f:
-                print("GeckoDriver log:")
-                print(f.read()[-1000:])  # Last 1000 chars
+        print(f"✗ Error creating Firefox driver: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 def load_progress():

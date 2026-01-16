@@ -53,11 +53,7 @@ jobs:
         LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
         N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
         MOZ_HEADLESS: 1
-        DISPLAY: :99
       run: |
-        # Start virtual display for Firefox
-        Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-        sleep 2
         python full_workflow.py
         
     - name: Save cache

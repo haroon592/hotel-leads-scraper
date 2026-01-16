@@ -1,10 +1,10 @@
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.firefox import GeckoDriverManager
 import time
 import os
 import json
@@ -57,36 +57,24 @@ def load_json(path):
 def create_driver(headless=True):
     options = Options()
     if headless:
-        options.add_argument("--headless=new")
+        options.add_argument("--headless")
     
-    # Critical stability flags for GitHub Actions
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-software-rasterizer")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-setuid-sandbox")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--start-maximized")
-    options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+    options.add_argument("--width=1920")
+    options.add_argument("--height=1080")
     
-    # Download preferences
-    prefs = {
-        "download.default_directory": DOWNLOAD_DIR,
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": True,
-        "profile.default_content_settings.popups": 0
-    }
-    options.add_experimental_option("prefs", prefs)
-    options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-    options.add_experimental_option('useAutomationExtension', False)
+    # Download preferences for Firefox
+    options.set_preference("browser.download.folderList", 2)
+    options.set_preference("browser.download.dir", DOWNLOAD_DIR)
+    options.set_preference("browser.download.useDownloadDir", True)
+    options.set_preference("browser.download.manager.showWhenStarting", False)
+    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv,application/octet-stream")
+    options.set_preference("pdfjs.disabled", True)
     
-    # Use webdriver-manager to auto-install matching ChromeDriver
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    # Use webdriver-manager to auto-install matching GeckoDriver
+    service = Service(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=options)
     driver.set_page_load_timeout(30)
     return driver
 

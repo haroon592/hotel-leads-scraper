@@ -25,17 +25,11 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install Chrome and ChromeDriver
+    - name: Install Firefox and GeckoDriver
       run: |
         sudo apt-get update
-        sudo apt-get install -y wget unzip xvfb libnss3 libxss1 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libdrm2
-        # Remove any existing chromedriver
-        sudo rm -f /usr/bin/chromedriver
-        # Install Chrome
-        wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-        sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
-        google-chrome --version
-        # ChromeDriver will be managed by webdriver-manager (in Python)
+        sudo apt-get install -y firefox
+        firefox --version
         
     - name: Install Python dependencies
       run: |

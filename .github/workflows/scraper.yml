@@ -28,7 +28,7 @@ jobs:
     - name: Install Chrome and ChromeDriver
       run: |
         sudo apt-get update
-        sudo apt-get install -y wget unzip xvfb libxi6 libgconf-2-4 libnss3 libxss1 libappindicator3-1 libasound2 libatk-bridge2.0-0 libgtk-3-0
+        sudo apt-get install -y wget unzip xvfb libnss3 libxss1 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libdrm2
         # Remove any existing chromedriver
         sudo rm -f /usr/bin/chromedriver
         # Install Chrome
@@ -88,6 +88,8 @@ jobs:
         WEBHOOK="${WEBHOOK_URL_INPUT:-$N8N_WEBHOOK_URL}"
         
         if [ -n "$WEBHOOK" ]; then
+          # Make sure requests is installed
+          pip install requests 2>/dev/null || true
           # Extract JSON output from script
           python send_results.py "$WEBHOOK"
         else

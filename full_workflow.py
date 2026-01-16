@@ -72,11 +72,21 @@ def create_driver(headless=True):
     options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv,application/octet-stream")
     options.set_preference("pdfjs.disabled", True)
     
+    # Increase timeouts for GitHub Actions
+    options.set_preference("dom.max_script_run_time", 0)
+    options.set_preference("dom.max_chrome_script_run_time", 0)
+    
     # Use webdriver-manager to auto-install matching GeckoDriver
-    service = Service(GeckoDriverManager().install())
-    driver = webdriver.Firefox(service=service, options=options)
-    driver.set_page_load_timeout(30)
-    return driver
+    try:
+        service = Service(GeckoDriverManager().install())
+        service.log_path = os.path.join(os.getcwd(), 'geckodriver.log')
+        driver = webdriver.Firefox(service=service, options=options)
+        driver.set_page_load_timeout(60)
+        driver.set_script_timeout(60)
+        return driver
+    except Exception as e:
+        print(f"Error creating Firefox driver: {e}")
+        raise
 
 def load_progress():
     data = load_json(PROGRESS_FILE)

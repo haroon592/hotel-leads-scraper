@@ -58,21 +58,36 @@ def create_driver(headless=True):
     options = Options()
     if headless:
         options.add_argument("--headless=new")
+    
+    # Critical stability flags for GitHub Actions
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--disable-web-security")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--start-maximized")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+    
+    # Download preferences
     prefs = {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
+        "safebrowsing.enabled": True,
+        "profile.default_content_settings.popups": 0
     }
     options.add_experimental_option("prefs", prefs)
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+    options.add_experimental_option('useAutomationExtension', False)
     
     # Use webdriver-manager to auto-install matching ChromeDriver
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
+    driver.set_page_load_timeout(30)
     return driver
 
 def load_progress():
@@ -124,17 +139,29 @@ def collect_all_links():
         # To force re-collection, delete the all_lead_links.json file
         return existing
 
-    driver = create_driver(headless=False)
-    wait = WebDriverWait(driver, 20)
-
+    driver = None
+    wait = None
+    
     try:
+        with print_lock:
+            print("Creating Chrome driver...")
+        driver = create_driver(headless=False)
+        wait = WebDriverWait(driver, 20)
+        
+        with print_lock:
+            print("Navigating to login page...")
         driver.get("https://hotelprojectleads.com/login")
+        
+        with print_lock:
+            print("Waiting for login form...")
         wait.until(EC.presence_of_element_located((By.ID, 'user_login')))
         
         # Use environment variables for credentials (more secure)
         email = os.environ.get('LOGIN_EMAIL', 'stevekuzara@gmail.com')
         password = os.environ.get('LOGIN_PASSWORD', '1Thotel47')
         
+        with print_lock:
+            print(f"Logging in as {email}...")
         driver.find_element(By.ID, 'user_login').send_keys(email)
         driver.find_element(By.ID, 'user_pass').send_keys(password)
         driver.find_element(By.ID, 'wp-submit').click()

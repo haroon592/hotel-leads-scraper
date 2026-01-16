@@ -25,11 +25,14 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install Firefox and GeckoDriver
+    - name: Install Firefox ESR
       run: |
         sudo apt-get update
-        sudo apt-get install -y firefox
-        firefox --version
+        sudo apt-get remove -y firefox
+        sudo add-apt-repository -y ppa:mozillateam/ppa
+        sudo apt-get update
+        sudo apt-get install -y firefox-esr
+        firefox-esr --version || firefox --version
         
     - name: Install Python dependencies
       run: |

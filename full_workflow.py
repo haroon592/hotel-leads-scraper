@@ -57,35 +57,57 @@ def load_json(path):
 def create_driver(headless=True):
     options = Options()
     if headless:
-        options.add_argument("--headless")
+        options.add_argument("-headless")
     
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--width=1920")
-    options.add_argument("--height=1080")
-    
-    # Download preferences for Firefox
+    # Essential Firefox options
     options.set_preference("browser.download.folderList", 2)
     options.set_preference("browser.download.dir", DOWNLOAD_DIR)
     options.set_preference("browser.download.useDownloadDir", True)
     options.set_preference("browser.download.manager.showWhenStarting", False)
-    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv,application/octet-stream")
-    options.set_preference("pdfjs.disabled", True)
+    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv")
     
-    # Increase timeouts for GitHub Actions
-    options.set_preference("dom.max_script_run_time", 0)
-    options.set_preference("dom.max_chrome_script_run_time", 0)
+    # Performance and stability
+    options.set_preference("network.http.connection-timeout", 120)
+    options.set_preference("dom.max_script_run_time", 120)
+    options.set_preference("marionette.port", 2828)
     
-    # Use webdriver-manager to auto-install matching GeckoDriver
+    # Find Firefox binary
+    firefox_binary = None
+    possible_paths = [
+        "/usr/bin/firefox-esr",
+        "/usr/bin/firefox",
+        "/snap/bin/firefox"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            firefox_binary = path
+            print(f"Found Firefox at: {firefox_binary}")
+            break
+    
+    if firefox_binary:
+        options.binary_location = firefox_binary
+    
     try:
-        service = Service(GeckoDriverManager().install())
-        service.log_path = os.path.join(os.getcwd(), 'geckodriver.log')
+        print("Installing GeckoDriver...")
+        service = Service(
+            GeckoDriverManager().install(),
+            log_path=os.path.join(os.getcwd(), 'geckodriver.log')
+        )
+        
+        print("Starting Firefox...")
         driver = webdriver.Firefox(service=service, options=options)
-        driver.set_page_load_timeout(60)
-        driver.set_script_timeout(60)
+        driver.set_page_load_timeout(90)
+        driver.set_script_timeout(90)
+        print("Firefox started successfully!")
         return driver
     except Exception as e:
         print(f"Error creating Firefox driver: {e}")
+        # Try to read geckodriver log
+        log_path = os.path.join(os.getcwd(), 'geckodriver.log')
+        if os.path.exists(log_path):
+            with open(log_path, 'r') as f:
+                print("GeckoDriver log:")
+                print(f.read()[-1000:])  # Last 1000 chars
         raise
 
 def load_progress():

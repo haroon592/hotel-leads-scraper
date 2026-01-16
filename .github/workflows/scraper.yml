@@ -25,14 +25,10 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install Firefox ESR
+    - name: Setup Firefox
       run: |
-        sudo apt-get update
-        sudo apt-get remove -y firefox
-        sudo add-apt-repository -y ppa:mozillateam/ppa
-        sudo apt-get update
-        sudo apt-get install -y firefox-esr
-        firefox-esr --version || firefox --version
+        firefox --version
+        # Firefox is already installed in Ubuntu 24.04
         
     - name: Install Python dependencies
       run: |

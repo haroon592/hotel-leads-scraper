@@ -1,0 +1,30 @@
+# Downloads and data files
+lead_downloads/
+lead_downloads_test/
+downloads/
+
+# Progress and cache files
+all_lead_links.json
+download_progress.json
+cookies.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

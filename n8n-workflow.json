@@ -1,0 +1,197 @@
+{
+  "name": "Hotel Leads Scraper Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "notes": "Triggers every Monday at 9:00 AM"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hotel-leads-results",
+        "options": {}
+      },
+      "name": "Webhook - Receive Results",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 500],
+      "webhookId": "hotel-leads-webhook",
+      "notes": "Copy this webhook URL and add to GitHub Secrets as N8N_WEBHOOK_URL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/YOUR_USERNAME/YOUR_REPO/actions/workflows/scraper.yml/dispatches",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ref",
+              "value": "main"
+            },
+            {
+              "name": "inputs",
+              "value": "={{ { \"webhook_url\": $node['Webhook - Receive Results'].json.webhookUrl } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Trigger GitHub Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "notes": "Replace YOUR_USERNAME and YOUR_REPO with your actual GitHub details"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "success"
+            }
+          ]
+        }
+      },
+      "name": "Check If Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [470, 500]
+    },
+    {
+      "parameters": {
+        "content": "## 🎉 Scraping Successful!\n\n**Timestamp:** {{ $json.timestamp }}\n**Run ID:** {{ $json.run_id }}\n\n### Statistics\n- ✅ Total Downloaded: {{ $json.stats.total_downloaded }}\n- ❌ Failed: {{ $json.stats.total_failed }}\n- 📁 Files in Folder: {{ $json.stats.files_in_folder }}\n\n### Links\n- [View Workflow Run]({{ $json.links.workflow_run }})\n- [Download Artifacts]({{ $json.links.artifacts }})\n\n---\nYou can download the CSV files from the artifacts link above.",
+        "options": {}
+      },
+      "name": "Format Success Message",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [690, 400]
+    },
+    {
+      "parameters": {
+        "content": "## ⚠️ Scraping Failed\n\n**Timestamp:** {{ $json.timestamp }}\n**Run ID:** {{ $json.run_id }}\n\n### Error Details\n{{ $json.error || 'Unknown error' }}\n\n### Links\n- [View Workflow Run]({{ $json.links.workflow_run }})\n\nPlease check the GitHub Actions logs for more details.",
+        "options": {}
+      },
+      "name": "Format Error Message",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [690, 600]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.links.artifacts }}",
+        "options": {}
+      },
+      "name": "Optional: Download Artifacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 400],
+      "notes": "You can add logic here to automatically download CSV files from GitHub",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $json.content }}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [910, 500],
+      "notes": "Optional: Send notification to Telegram/Slack/Email",
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Trigger GitHub Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Receive Results": {
+      "main": [
+        [
+          {
+            "node": "Check If Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Success": {
+      "main": [
+        [
+          {
+            "node": "Format Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Message": {
+      "main": [
+        [
+          {
+            "node": "Optional: Download Artifacts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

@@ -1,0 +1,91 @@
+name: Hotel Leads Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      webhook_url:
+        description: 'n8n Webhook URL to send results'
+        required: false
+        type: string
+  schedule:
+    # Runs every Monday at 9:00 AM UTC (adjust as needed)
+    - cron: '0 9 * * 1'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install Chrome and ChromeDriver
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget unzip
+        wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get -f install -y
+        google-chrome --version
+        
+    - name: Install Python dependencies
+      run: |
+        pip install selenium webdriver-manager requests
+        
+    - name: Restore cached data
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          all_lead_links.json
+          download_progress.json
+          cookies.json
+        key: scraper-data-${{ github.run_id }}
+        restore-keys: |
+          scraper-data-
+          
+    - name: Run scraper
+      env:
+        LOGIN_EMAIL: ${{ secrets.LOGIN_EMAIL }}
+        LOGIN_PASSWORD: ${{ secrets.LOGIN_PASSWORD }}
+        N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      run: |
+        python full_workflow.py
+        
+    - name: Save cache
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: |
+          all_lead_links.json
+          download_progress.json
+          cookies.json
+        key: scraper-data-${{ github.run_id }}
+        
+    - name: Upload downloaded leads
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: leads-${{ github.run_number }}
+        path: lead_downloads/
+        retention-days: 30
+        
+    - name: Send results to n8n
+      if: always()
+      env:
+        N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+        WEBHOOK_URL_INPUT: ${{ inputs.webhook_url }}
+      run: |
+        # Use input webhook URL if provided, otherwise use secret
+        WEBHOOK="${WEBHOOK_URL_INPUT:-$N8N_WEBHOOK_URL}"
+        
+        if [ -n "$WEBHOOK" ]; then
+          # Extract JSON output from script
+          python send_results.py "$WEBHOOK"
+        else
+          echo "No webhook URL configured"
+        fi

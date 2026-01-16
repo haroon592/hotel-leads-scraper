@@ -132,8 +132,8 @@ def collect_all_links():
     
     try:
         with print_lock:
-            print("Creating Chrome driver...")
-        driver = create_driver(headless=False)
+            print("Creating Firefox driver...")
+        driver = create_driver(headless=HEADLESS)
         wait = WebDriverWait(driver, 20)
         
         with print_lock:

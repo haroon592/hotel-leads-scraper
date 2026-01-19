@@ -1,10 +1,8 @@
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.firefox import GeckoDriverManager
 import time
 import os
 import json
@@ -71,8 +69,8 @@ def create_driver(headless=True):
     options.set_preference("browser.cache.memory.enable", False)
     
     try:
-        service = Service(GeckoDriverManager().install())
-        driver = webdriver.Firefox(service=service, options=options)
+        # Use system geckodriver (installed in Dockerfile)
+        driver = webdriver.Firefox(options=options)
         driver.set_page_load_timeout(90)
         driver.set_script_timeout(90)
         return driver

@@ -5,7 +5,7 @@ import zipfile
 from datetime import datetime
 import threading
 import time
-from full_workflow import main as run_scraper, load_progress, stats
+from full_workflow_playwright import main as run_scraper, load_progress, stats
 
 app = Flask(__name__)
 

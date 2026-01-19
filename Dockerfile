@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install dependencies for Playwright
+# Install minimal dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -15,8 +15,8 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers
-RUN playwright install --with-deps chromium
+# Note: We don't install Playwright browsers because we're using Browserless.io
+# The browsers run on their servers, not ours
 
 # Copy application files
 COPY . .

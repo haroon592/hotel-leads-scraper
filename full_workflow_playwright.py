@@ -97,10 +97,7 @@ def collect_all_links():
         else:
             browser = p.chromium.launch(headless=False)
         
-        context = browser.new_context(
-            accept_downloads=True,
-            downloads_path=DOWNLOAD_DIR
-        )
+        context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         page.set_default_timeout(90000)
 
@@ -225,10 +222,7 @@ def worker_browser(worker_id, links_deque, cookies):
         else:
             browser = playwright.chromium.launch(headless=True)
         
-        context = browser.new_context(
-            accept_downloads=True,
-            downloads_path=DOWNLOAD_DIR
-        )
+        context = browser.new_context(accept_downloads=True)
         
         # Add cookies
         context.add_cookies(cookies)

@@ -81,15 +81,21 @@ def create_driver(headless=True):
             print(f"Using Browserless with key: {key_preview} (length: {len(BROWSERLESS_API_KEY)})")
             
             browserless_url = f"https://chrome.browserless.io/webdriver?token={BROWSERLESS_API_KEY}"
+            print(f"Connecting to: {browserless_url[:50]}...")
+            
             driver = webdriver.Remote(
                 command_executor=browserless_url,
                 options=options
             )
             driver.set_page_load_timeout(90)
             driver.set_script_timeout(90)
+            print("Successfully connected to Browserless!")
             return driver
         except Exception as e:
             print(f"Error creating Browserless driver: {e}")
+            print(f"Full error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise
     else:
         # Local Chrome

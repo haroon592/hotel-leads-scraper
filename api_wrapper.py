@@ -59,6 +59,27 @@ def run_scraper_background():
     finally:
         job_status["running"] = False
 
+@app.route('/test-browserless', methods=['GET'])
+def test_browserless():
+    """Test Browserless API key"""
+    import requests
+    api_key = "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606"
+    test_url = f"https://chrome.browserless.io/json/version?token={api_key}"
+    
+    try:
+        response = requests.get(test_url, timeout=10)
+        return jsonify({
+            "status": "success",
+            "status_code": response.status_code,
+            "response": response.text,
+            "api_key_preview": f"{api_key[:4]}...{api_key[-4:]}"
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""

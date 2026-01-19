@@ -33,8 +33,9 @@ PROGRESS_FILE = "download_progress.json"
 COOKIES_FILE = "cookies.json"
 
 # Browserless.io configuration
-BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY", "YOUR_API_KEY_HERE")
-USE_BROWSERLESS = os.getenv("USE_BROWSERLESS", "false").lower() == "true"
+# Hardcoded for testing - TODO: move back to env vars
+BROWSERLESS_API_KEY = "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606"
+USE_BROWSERLESS = True
 
 NUM_BROWSERS = 5
 HEADLESS = True

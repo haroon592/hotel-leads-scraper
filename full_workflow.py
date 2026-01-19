@@ -1,5 +1,5 @@
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -32,6 +32,10 @@ LINKS_FILE = "all_lead_links.json"
 PROGRESS_FILE = "download_progress.json"
 COOKIES_FILE = "cookies.json"
 
+# Browserless.io configuration
+BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY", "YOUR_API_KEY_HERE")
+USE_BROWSERLESS = os.getenv("USE_BROWSERLESS", "false").lower() == "true"
+
 NUM_BROWSERS = 5
 HEADLESS = True
 
@@ -55,28 +59,39 @@ def load_json(path):
 def create_driver(headless=True):
     options = Options()
     if headless:
-        options.add_argument("-headless")
+        options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    prefs = {
+        "download.default_directory": DOWNLOAD_DIR,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    }
+    options.add_experimental_option("prefs", prefs)
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
     
-    # Firefox download preferences
-    options.set_preference("browser.download.folderList", 2)
-    options.set_preference("browser.download.dir", DOWNLOAD_DIR)
-    options.set_preference("browser.download.useDownloadDir", True)
-    options.set_preference("browser.download.manager.showWhenStarting", False)
-    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv")
-    
-    # Disable cache for better performance
-    options.set_preference("browser.cache.disk.enable", False)
-    options.set_preference("browser.cache.memory.enable", False)
-    
-    try:
-        # Use system geckodriver (installed in Dockerfile)
-        driver = webdriver.Firefox(options=options)
+    if USE_BROWSERLESS:
+        # Connect to Browserless.io
+        try:
+            browserless_url = f"https://chrome.browserless.io/webdriver?token={BROWSERLESS_API_KEY}"
+            driver = webdriver.Remote(
+                command_executor=browserless_url,
+                options=options
+            )
+            driver.set_page_load_timeout(90)
+            driver.set_script_timeout(90)
+            return driver
+        except Exception as e:
+            print(f"Error creating Browserless driver: {e}")
+            raise
+    else:
+        # Local Chrome
+        driver = webdriver.Chrome(options=options)
         driver.set_page_load_timeout(90)
         driver.set_script_timeout(90)
         return driver
-    except Exception as e:
-        print(f"Error creating Firefox driver: {e}")
-        raise
 
 def load_progress():
     data = load_json(PROGRESS_FILE)
@@ -163,6 +178,11 @@ def collect_all_links():
                         found += 1
             with print_lock:
                 print(f"  Found {found} new leads. Total: {len(all_links)}")
+            
+            # Save progress after each page
+            save_json(LINKS_FILE, all_links)
+            with print_lock:
+                print(f"  ✓ Saved progress to {LINKS_FILE}")
 
             try:
                 next_button = None
@@ -194,14 +214,18 @@ def collect_all_links():
                     print(f"Pagination ended: {e}")
                 break
 
-        save_json(LINKS_FILE, all_links)
         with print_lock:
-            print(f"Saved {len(all_links)} links to {LINKS_FILE}")
+            print(f"Final save: {len(all_links)} links to {LINKS_FILE}")
         return all_links
     except Exception as e:
         with print_lock:
             print(f"Error collecting links: {e}")
-        return []
+        # Save whatever we collected before the error
+        if 'all_links' in locals() and all_links:
+            save_json(LINKS_FILE, all_links)
+            with print_lock:
+                print(f"Saved {len(all_links)} links before error")
+        return all_links if 'all_links' in locals() else []
     finally:
         try:
             driver.quit()
@@ -324,5 +348,4 @@ def main():
         print("="*60)
 
 if __name__ == '__main__':
-    main()
-    
+    main() 

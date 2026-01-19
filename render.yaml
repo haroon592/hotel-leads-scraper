@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: hotel-leads-scraper
+    env: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: LOGIN_EMAIL
+        sync: false
+      - key: LOGIN_PASSWORD
+        sync: false
+      - key: PORT
+        value: 8080

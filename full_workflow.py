@@ -1,10 +1,8 @@
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.firefox import GeckoDriverManager
 import time
 import os
 import json
@@ -57,36 +55,20 @@ def load_json(path):
 def create_driver(headless=True):
     options = Options()
     if headless:
-        options.add_argument("-headless")
-    
-    # Essential Firefox options
-    options.set_preference("browser.download.folderList", 2)
-    options.set_preference("browser.download.dir", DOWNLOAD_DIR)
-    options.set_preference("browser.download.useDownloadDir", True)
-    options.set_preference("browser.download.manager.showWhenStarting", False)
-    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "text/csv,application/csv")
-    
-    # Disable unnecessary features for headless mode
-    options.set_preference("browser.cache.disk.enable", False)
-    options.set_preference("browser.cache.memory.enable", False)
-    options.set_preference("browser.cache.offline.enable", False)
-    options.set_preference("network.http.use-cache", False)
-    
-    try:
-        print("Installing GeckoDriver...")
-        service = Service(GeckoDriverManager().install())
-        
-        print("Starting Firefox in headless mode...")
-        driver = webdriver.Firefox(service=service, options=options)
-        driver.set_page_load_timeout(90)
-        driver.set_script_timeout(90)
-        print("✓ Firefox started successfully!")
-        return driver
-    except Exception as e:
-        print(f"✗ Error creating Firefox driver: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+        options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    prefs = {
+        "download.default_directory": DOWNLOAD_DIR,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    }
+    options.add_experimental_option("prefs", prefs)
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    driver = webdriver.Chrome(options=options)
+    return driver
 
 def load_progress():
     data = load_json(PROGRESS_FILE)
@@ -133,35 +115,18 @@ def collect_all_links():
     if existing:
         with print_lock:
             print(f"Found existing links file with {len(existing)} links.")
-        # Automatically use existing links in n8n mode (non-interactive)
-        # To force re-collection, delete the all_lead_links.json file
-        return existing
+        use = input("Use existing link file? (y/n) ").strip().lower()
+        if use == 'y':
+            return existing
 
-    driver = None
-    wait = None
-    
+    driver = create_driver(headless=False)
+    wait = WebDriverWait(driver, 20)
+
     try:
-        with print_lock:
-            print("Creating Firefox driver...")
-        driver = create_driver(headless=HEADLESS)
-        wait = WebDriverWait(driver, 20)
-        
-        with print_lock:
-            print("Navigating to login page...")
         driver.get("https://hotelprojectleads.com/login")
-        
-        with print_lock:
-            print("Waiting for login form...")
         wait.until(EC.presence_of_element_located((By.ID, 'user_login')))
-        
-        # Use environment variables for credentials (more secure)
-        email = os.environ.get('LOGIN_EMAIL', 'stevekuzara@gmail.com')
-        password = os.environ.get('LOGIN_PASSWORD', '1Thotel47')
-        
-        with print_lock:
-            print(f"Logging in as {email}...")
-        driver.find_element(By.ID, 'user_login').send_keys(email)
-        driver.find_element(By.ID, 'user_pass').send_keys(password)
+        driver.find_element(By.ID, 'user_login').send_keys("stevekuzara@gmail.com")
+        driver.find_element(By.ID, 'user_pass').send_keys("1Thotel47")
         driver.find_element(By.ID, 'wp-submit').click()
         time.sleep(4)
 
@@ -238,9 +203,6 @@ def collect_all_links():
 
 def worker_browser(worker_id, links_deque, cookies):
     driver = None
-    downloads_since_restart = 0
-    RESTART_EVERY = 100  # Restart browser every 100 downloads to prevent memory issues
-    
     while True:
         try:
             with links_lock:
@@ -251,17 +213,7 @@ def worker_browser(worker_id, links_deque, cookies):
             lead_id = extract_lead_id(href)
             
             try:
-                # Restart browser periodically to prevent memory leaks and connection issues
-                if driver is None or downloads_since_restart >= RESTART_EVERY:
-                    if driver is not None:
-                        with print_lock:
-                            print(f"[Browser-{worker_id}] 🔄 Restarting browser (processed {downloads_since_restart} leads)")
-                        try:
-                            driver.quit()
-                        except:
-                            pass
-                        time.sleep(1)
-                    
+                if driver is None:
                     driver = create_driver(headless=HEADLESS)
                     driver.get('https://hotelprojectleads.com/')
                     time.sleep(0.5)
@@ -271,12 +223,10 @@ def worker_browser(worker_id, links_deque, cookies):
                         except:
                             pass
                     time.sleep(0.2)
-                    downloads_since_restart = 0
                 
                 csv_url = f"https://hotelprojectleads.com/members/lead/csv?id={lead_id}"
                 driver.get(csv_url)
                 time.sleep(2)
-                downloads_since_restart += 1
                 
                 with stats_lock:
                     stats["downloaded"] += 1
@@ -366,42 +316,5 @@ def main():
         print("="*60)
 
 if __name__ == '__main__':
-    import sys
+    main()
     
-    # Output JSON summary for n8n to parse
-    try:
-        main()
-        
-        # Load final results
-        progress = load_progress()
-        summary = {
-            "status": "success",
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "total_leads": stats["total"],
-            "downloaded": stats["downloaded"],
-            "failed": stats["failed"],
-            "all_time_downloaded": len(progress["downloaded"]),
-            "all_time_failed": len(progress["failed"])
-        }
-        
-        # Print JSON for n8n to capture
-        print("\n" + "="*60)
-        print("N8N_JSON_OUTPUT_START")
-        print(json.dumps(summary, indent=2))
-        print("N8N_JSON_OUTPUT_END")
-        print("="*60)
-        
-        sys.exit(0)
-        
-    except Exception as e:
-        error_summary = {
-            "status": "error",
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "error": str(e)
-        }
-        print("\n" + "="*60)
-        print("N8N_JSON_OUTPUT_START")
-        print(json.dumps(error_summary, indent=2))
-        print("N8N_JSON_OUTPUT_END")
-        print("="*60)
-        sys.exit(1)

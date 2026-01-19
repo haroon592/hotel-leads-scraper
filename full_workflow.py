@@ -75,6 +75,10 @@ def create_driver(headless=True):
     if USE_BROWSERLESS:
         # Connect to Browserless.io
         try:
+            # Debug: Print key info (first/last 4 chars only for security)
+            key_preview = f"{BROWSERLESS_API_KEY[:4]}...{BROWSERLESS_API_KEY[-4:]}" if len(BROWSERLESS_API_KEY) > 8 else "INVALID"
+            print(f"Using Browserless with key: {key_preview} (length: {len(BROWSERLESS_API_KEY)})")
+            
             browserless_url = f"https://chrome.browserless.io/webdriver?token={BROWSERLESS_API_KEY}"
             driver = webdriver.Remote(
                 command_executor=browserless_url,

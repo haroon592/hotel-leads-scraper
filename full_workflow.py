@@ -56,9 +56,18 @@ def create_driver(headless=True):
     options = Options()
     if headless:
         options.add_argument("--headless=new")
+    
+    # Essential flags for Docker/containerized environments
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--single-process")
+    options.add_argument("--remote-debugging-port=9222")
+    
+    # Download preferences
     prefs = {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
@@ -67,8 +76,15 @@ def create_driver(headless=True):
     }
     options.add_experimental_option("prefs", prefs)
     options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    driver = webdriver.Chrome(options=options)
-    return driver
+    
+    try:
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(90)
+        driver.set_script_timeout(90)
+        return driver
+    except Exception as e:
+        print(f"Error creating Chrome driver: {e}")
+        raise
 
 def load_progress():
     data = load_json(PROGRESS_FILE)

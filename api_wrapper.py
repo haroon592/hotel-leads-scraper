@@ -24,6 +24,13 @@ def run_scraper_background():
         job_status["running"] = True
         job_status["error"] = None
         
+        # Debug: Print environment variables
+        import os
+        print(f"DEBUG: USE_BROWSERLESS = {os.getenv('USE_BROWSERLESS')}")
+        api_key = os.getenv('BROWSERLESS_API_KEY', 'NOT_SET')
+        key_preview = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else api_key
+        print(f"DEBUG: BROWSERLESS_API_KEY = {key_preview} (length: {len(api_key)})")
+        
         # Run the scraper
         run_scraper()
         

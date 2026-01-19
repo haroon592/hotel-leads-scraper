@@ -33,7 +33,7 @@ BROWSERLESS_API_KEY = "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606"
 USE_BROWSERLESS = True
 BROWSERLESS_URL = f"wss://chrome.browserless.io?token={BROWSERLESS_API_KEY}"
 
-NUM_BROWSERS = 5
+NUM_BROWSERS = 1  # Reduced for Browserless.io free tier limits
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 

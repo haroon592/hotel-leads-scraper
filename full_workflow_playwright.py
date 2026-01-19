@@ -29,11 +29,11 @@ PROGRESS_FILE = "download_progress.json"
 COOKIES_FILE = "cookies.json"
 
 # Browserless.io configuration
-BROWSERLESS_API_KEY = "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606"
-USE_BROWSERLESS = True
+BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY", "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606")
+USE_BROWSERLESS = os.getenv("USE_BROWSERLESS", "false").lower() == "true"
 BROWSERLESS_URL = f"wss://chrome.browserless.io?token={BROWSERLESS_API_KEY}"
 
-NUM_BROWSERS = 1  # Reduced for Browserless.io free tier limits
+NUM_BROWSERS = 1
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 

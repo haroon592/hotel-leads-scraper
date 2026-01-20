@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 venv/
 ENV/
 build/
@@ -24,7 +23,6 @@ wheels/
 *.egg
 
 # Environment variables
-.env
 .env.local
 
 # Selenium / Browser
@@ -37,6 +35,10 @@ all_lead_links.json
 download_progress.json
 cookies.json
 leads_export.zip
+
+# Logs
+*.log
+scheduler.log
 
 # IDE
 .vscode/

@@ -6,9 +6,13 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
 import json
+import subprocess
 from threading import Thread, Lock
 from collections import deque
 from urllib.parse import urlparse, parse_qs
+from dotenv import load_dotenv
+
+load_dotenv()
 
 RESULTS_URL = (
     "https://hotelprojectleads.com/members/lead-search-results"
@@ -32,13 +36,11 @@ LINKS_FILE = "all_lead_links.json"
 PROGRESS_FILE = "download_progress.json"
 COOKIES_FILE = "cookies.json"
 
-# Browserless.io configuration
-# Hardcoded for testing - TODO: move back to env vars
-BROWSERLESS_API_KEY = "2Tosq0CEfUH1tWa9ba858b6cb12463f9d5943054dfda50606"
-USE_BROWSERLESS = True
+HPL_USERNAME = os.getenv('HPL_USERNAME', 'stevekuzara@gmail.com')
+HPL_PASSWORD = os.getenv('HPL_PASSWORD', '1Thotel47')
 
-NUM_BROWSERS = 5
-HEADLESS = True
+NUM_BROWSERS = int(os.getenv('NUM_BROWSERS', '5'))  # Parallel browsers for downloading
+HEADLESS = os.getenv('HEADLESS', 'True').lower() == 'true'
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -57,6 +59,23 @@ def load_json(path):
     with open(path, 'r') as f:
         return json.load(f)
 
+def kill_chrome_processes():
+    """Kill any existing Chrome/ChromeDriver processes to avoid conflicts"""
+    try:
+        if os.name == 'nt':  # Windows
+            subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'], 
+                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(['taskkill', '/F', '/IM', 'chromedriver.exe'], 
+                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        else:  # Linux/Mac
+            subprocess.run(['pkill', '-9', 'chrome'], 
+                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            subprocess.run(['pkill', '-9', 'chromedriver'], 
+                         stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        time.sleep(1)  # Wait for processes to terminate
+    except Exception as e:
+        pass  # Ignore errors if no processes found
+
 def create_driver(headless=True):
     options = Options()
     if headless:
@@ -64,6 +83,18 @@ def create_driver(headless=True):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-software-rasterizer")
+    
+    # Use unique user data directory to avoid conflicts
+    import tempfile
+    import uuid
+    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_{uuid.uuid4().hex[:8]}_")
+    options.add_argument(f"--user-data-dir={user_data_dir}")
+    
+    # Disable shared memory to avoid conflicts
+    options.add_argument("--disable-dev-shm-usage")
+    
     prefs = {
         "download.default_directory": DOWNLOAD_DIR,
         "download.prompt_for_download": False,
@@ -73,36 +104,34 @@ def create_driver(headless=True):
     options.add_experimental_option("prefs", prefs)
     options.add_experimental_option('excludeSwitches', ['enable-logging'])
     
-    if USE_BROWSERLESS:
-        # Connect to Browserless.io
-        try:
-            # Debug: Print key info (first/last 4 chars only for security)
-            key_preview = f"{BROWSERLESS_API_KEY[:4]}...{BROWSERLESS_API_KEY[-4:]}" if len(BROWSERLESS_API_KEY) > 8 else "INVALID"
-            print(f"Using Browserless with key: {key_preview} (length: {len(BROWSERLESS_API_KEY)})")
-            
-            browserless_url = f"https://chrome.browserless.io/webdriver?token={BROWSERLESS_API_KEY}"
-            print(f"Connecting to: {browserless_url[:50]}...")
-            
-            driver = webdriver.Remote(
-                command_executor=browserless_url,
-                options=options
-            )
-            driver.set_page_load_timeout(90)
-            driver.set_script_timeout(90)
-            print("Successfully connected to Browserless!")
-            return driver
-        except Exception as e:
-            print(f"Error creating Browserless driver: {e}")
-            print(f"Full error details: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
-    else:
-        # Local Chrome
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(90)
-        driver.set_script_timeout(90)
-        return driver
+    # Local Chrome
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(180)  # Increased from 90 to 180 seconds for slow internet
+    driver.set_script_timeout(180)     # Increased from 90 to 180 seconds for slow internet
+    return driver
+
+def wait_for_download_complete(download_dir, timeout=30):
+    """
+    Wait for any download to complete in the download directory.
+    Returns True if a file was downloaded, False otherwise.
+    """
+    start_time = time.time()
+    initial_files = set(os.listdir(download_dir))
+    
+    while time.time() - start_time < timeout:
+        current_files = set(os.listdir(download_dir))
+        new_files = current_files - initial_files
+        
+        # Check if there are any .crdownload or .tmp files (download in progress)
+        in_progress = any(f.endswith(('.crdownload', '.tmp')) for f in current_files)
+        
+        if new_files and not in_progress:
+            # A new file appeared and no downloads in progress
+            return True
+        
+        time.sleep(0.5)
+    
+    return False
 
 def load_progress():
     data = load_json(PROGRESS_FILE)
@@ -147,8 +176,7 @@ def extract_lead_id(href):
 def collect_all_links():
     existing = load_json(LINKS_FILE)
     if existing:
-        with print_lock:
-            print(f"Found existing links file with {len(existing)} links.")
+        print(f"Found {len(existing)} existing links.")
         use = input("Use existing link file? (y/n) ").strip().lower()
         if use == 'y':
             return existing
@@ -159,15 +187,13 @@ def collect_all_links():
     try:
         driver.get("https://hotelprojectleads.com/login")
         wait.until(EC.presence_of_element_located((By.ID, 'user_login')))
-        driver.find_element(By.ID, 'user_login').send_keys("stevekuzara@gmail.com")
-        driver.find_element(By.ID, 'user_pass').send_keys("1Thotel47")
+        driver.find_element(By.ID, 'user_login').send_keys(HPL_USERNAME)
+        driver.find_element(By.ID, 'user_pass').send_keys(HPL_PASSWORD)
         driver.find_element(By.ID, 'wp-submit').click()
         time.sleep(4)
 
         cookies = driver.get_cookies()
         save_json(COOKIES_FILE, cookies)
-        with print_lock:
-            print(f"Saved {len(cookies)} cookies to {COOKIES_FILE}")
 
         driver.get(RESULTS_URL)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
@@ -176,9 +202,20 @@ def collect_all_links():
         all_links = []
         page = 1
         while True:
-            with print_lock:
-                print(f"Collecting page {page}...")
-            time.sleep(2)
+            print(f"Collecting page {page}...")
+            
+            # Wait for page to fully load - wait for table rows to be present
+            try:
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_all_elements_located((By.TAG_NAME, 'tr'))
+                )
+                time.sleep(3)  # Extra wait for dynamic content
+            except:
+                print(f"Warning: Page {page} took too long to load, retrying...")
+                time.sleep(5)
+                driver.refresh()
+                time.sleep(5)
+                
             rows = driver.find_elements(By.TAG_NAME, 'tr')
             found = 0
             for row in rows:
@@ -187,55 +224,108 @@ def collect_all_links():
                     if href and 'lead-detail' in href and href not in all_links:
                         all_links.append(href)
                         found += 1
-            with print_lock:
-                print(f"  Found {found} new leads. Total: {len(all_links)}")
+                            
+            print(f"Page {page}: Found {found} leads (Total: {len(all_links)})")
             
             # Save progress after each page
             save_json(LINKS_FILE, all_links)
-            with print_lock:
-                print(f"  ✓ Saved progress to {LINKS_FILE}")
 
             try:
+                # Wait a bit before looking for next button
+                time.sleep(2)
+                
+                # Scroll to bottom to ensure pagination loads
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
+                
                 next_button = None
+                
+                # Try multiple methods to find next button
+                # Method 1: Look for anchor tags with "next" text
                 anchors = driver.find_elements(By.TAG_NAME, 'a')
                 for a in anchors:
-                    t = a.text.strip().lower()
-                    if t in ['next', '>', 'next page', '»', '›']:
-                        next_button = a
-                        break
+                    try:
+                        t = a.text.strip().lower()
+                        if t in ['next', '>', 'next page', '»', '›']:
+                            next_button = a
+                            break
+                    except:
+                        continue
+                
+                # Method 2: Try CSS selectors
                 if not next_button:
-                    selectors = ["a.next", "a[rel='next']", ".pagination a.next"]
+                    selectors = ["a.next", "a[rel='next']", ".pagination a.next", "a[aria-label='Next']"]
                     for sel in selectors:
                         try:
                             next_button = driver.find_element(By.CSS_SELECTOR, sel)
-                            break
+                            if next_button:
+                                break
                         except:
-                            pass
+                            continue
+                
+                # Method 3: Check if next button is disabled (last page indicator)
+                if next_button:
+                    try:
+                        classes = next_button.get_attribute('class') or ''
+                        if 'disabled' in classes.lower():
+                            print("Next button is disabled. Last page reached.")
+                            break
+                    except:
+                        pass
+                
                 if not next_button:
-                    with print_lock:
-                        print("No next button found. Last page reached.")
-                    break
+                    # No next button found - could be last page or page didn't load
+                    if found == 0:
+                        # No leads on this page either, likely an error
+                        print("No leads found and no next button. Checking if page loaded correctly...")
+                        time.sleep(5)
+                        
+                        # Retry once
+                        driver.refresh()
+                        time.sleep(5)
+                        
+                        # Check again
+                        anchors = driver.find_elements(By.TAG_NAME, 'a')
+                        for a in anchors:
+                            try:
+                                t = a.text.strip().lower()
+                                if t in ['next', '>', 'next page', '»', '›']:
+                                    next_button = a
+                                    break
+                            except:
+                                continue
+                        
+                        if not next_button:
+                            print("Still no next button after retry. Last page reached.")
+                            break
+                    else:
+                        print("Last page reached.")
+                        break
+                
+                # Click next button
                 driver.execute_script("arguments[0].scrollIntoView(true);", next_button)
-                time.sleep(0.5)
-                next_button.click()
+                time.sleep(1)
+                
+                # Try clicking with JavaScript if normal click fails
+                try:
+                    next_button.click()
+                except:
+                    driver.execute_script("arguments[0].click();", next_button)
+                
                 page += 1
-                time.sleep(2)
+                time.sleep(3)  # Wait longer between pages for slow internet
+                
             except Exception as e:
-                with print_lock:
-                    print(f"Pagination ended: {e}")
+                print(f"Pagination ended: {e}")
                 break
 
-        with print_lock:
-            print(f"Final save: {len(all_links)} links to {LINKS_FILE}")
+        print(f"Collection complete: {len(all_links)} total links")
         return all_links
     except Exception as e:
-        with print_lock:
-            print(f"Error collecting links: {e}")
+        print(f"Error collecting links: {e}")
         # Save whatever we collected before the error
         if 'all_links' in locals() and all_links:
             save_json(LINKS_FILE, all_links)
-            with print_lock:
-                print(f"Saved {len(all_links)} links before error")
         return all_links if 'all_links' in locals() else []
     finally:
         try:
@@ -269,14 +359,31 @@ def worker_browser(worker_id, links_deque, cookies):
                 
                 csv_url = f"https://hotelprojectleads.com/members/lead/csv?id={lead_id}"
                 driver.get(csv_url)
-                time.sleep(2)
+                
+                download_success = wait_for_download_complete(DOWNLOAD_DIR, timeout=60)
+                
+                if not download_success:
+                    time.sleep(5)
+                    download_success = wait_for_download_complete(DOWNLOAD_DIR, timeout=30)
+                
+                rfp_path = os.path.join(DOWNLOAD_DIR, "rfp.csv")
+                if os.path.exists(rfp_path):
+                    new_path = os.path.join(DOWNLOAD_DIR, f"{lead_id}.csv")
+                    try:
+                        if os.path.exists(new_path):
+                            os.remove(new_path)
+                        os.rename(rfp_path, new_path)
+                        download_success = True
+                    except Exception as e:
+                        with print_lock:
+                            print(f"[Browser-{worker_id}] Error renaming file: {e}")
                 
                 with stats_lock:
                     stats["downloaded"] += 1
                     current = stats["downloaded"]
                     total = stats["total"]
                 
-                with print_lock:
+                if download_success:
                     print(f"[Browser-{worker_id}] ✓ {lead_id} ({current}/{total})")
                 
                 save_progress(lead_id, 'success')
@@ -284,8 +391,7 @@ def worker_browser(worker_id, links_deque, cookies):
             except Exception as e:
                 with stats_lock:
                     stats["failed"] += 1
-                with print_lock:
-                    print(f"[Browser-{worker_id}] ✗ {lead_id} - {str(e)[:50]}")
+                print(f"[Browser-{worker_id}] ✗ {lead_id}")
                 save_progress(lead_id, 'failed')
                 
                 try:
@@ -298,8 +404,7 @@ def worker_browser(worker_id, links_deque, cookies):
                 time.sleep(2)
                 
         except Exception as e:
-            with print_lock:
-                print(f"[Browser-{worker_id}] Error: {e}")
+            print(f"[Browser-{worker_id}] Error: {e}")
             try:
                 if driver:
                     driver.quit()
@@ -315,25 +420,23 @@ def worker_browser(worker_id, links_deque, cookies):
         pass
 
 def main():
+    print("Cleaning up any existing Chrome processes...")
+    kill_chrome_processes()
+    
     all_links = collect_all_links()
 
     progress = load_progress()
     to_download = [l for l in all_links if extract_lead_id(l) not in progress['downloaded']]
 
-    with print_lock:
-        print(f"\nTotal links: {len(all_links)}")
-        print(f"Already downloaded: {len(progress['downloaded'])}")
-        print(f"Remaining: {len(to_download)}")
+    print(f"Total: {len(all_links)} | Downloaded: {len(progress['downloaded'])} | Remaining: {len(to_download)}")
 
     if not to_download:
-        with print_lock:
-            print("Nothing to download. Exiting.")
+        print("Nothing to download.")
         return
 
     cookies = load_json(COOKIES_FILE)
     if not cookies:
-        with print_lock:
-            print("No cookies found. Please run collection first.")
+        print("No cookies found. Please run collection first.")
         return
 
     links_deque = deque(to_download)
@@ -349,14 +452,7 @@ def main():
     for t in threads:
         t.join()
 
-    with print_lock:
-        print("\n" + "="*60)
-        print("DOWNLOAD COMPLETE")
-        print("="*60)
-        print(f"Total: {stats['total']}")
-        print(f"Downloaded: {stats['downloaded']}")
-        print(f"Failed: {stats['failed']}")
-        print("="*60)
+    print(f"Download complete: {stats['downloaded']} success, {stats['failed']} failed")
 
 if __name__ == '__main__':
     main() 
